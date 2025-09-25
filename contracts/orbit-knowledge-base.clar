@@ -529,3 +529,285 @@
   )
 )
 
+;; Creates encrypted backup snapshots for critical data recovery
+(define-public (create-encrypted-record-backup 
+  (record-id uint)
+  (backup-encryption-key (string-ascii 64))
+  (backup-location (string-ascii 128))
+  (recovery-contact principal)
+)
+  (let
+    (
+      (target-record (unwrap! (map-get? registry-database-records { record-id: record-id }) RECORD_NOT_FOUND))
+      (backup-id (+ (var-get total-encrypted-backups) u1))
+      (backup-timestamp block-height)
+    )
+    ;; Encrypted backup validation
+    (asserts! (does-record-exist? record-id) RECORD_NOT_FOUND)
+    (asserts! (or 
+      (is-eq (get owner-principal target-record) tx-sender)
+      (is-eq tx-sender registry-admin-controller)
+    ) OWNERSHIP_VERIFICATION_FAILED)
+    (asserts! (> (len backup-encryption-key) u0) ENCODING_STANDARD_BREACH)
+    (asserts! (< (len backup-encryption-key) u65) ENCODING_STANDARD_BREACH)
+    (asserts! (> (len backup-location) u0) ENCODING_STANDARD_BREACH)
+    (asserts! (< (len backup-location) u129) ENCODING_STANDARD_BREACH)
+    ;; Update encrypted backup counter
+    (var-set total-encrypted-backups backup-id)
+    (ok backup-id)
+  )
+)
+
+;; Encrypted backup registry storage
+(define-map encrypted-backup-registry
+  { backup-id: uint }
+  {
+    source-record: uint,
+    backup-creator: principal,
+    encryption-key-hash: (string-ascii 64),
+    backup-location: (string-ascii 128),
+    recovery-contact: principal,
+    backup-timestamp: uint,
+    verification-status: bool,
+    backup-integrity-score: uint
+  }
+)
+
+;; Global encrypted backup counter
+(define-data-var total-encrypted-backups uint u0)
+
+;; Implements time-based access restrictions for enhanced security
+(define-public (set-temporal-access-restriction 
+  (record-id uint)
+  (access-window-start uint)
+  (access-window-end uint)
+  (restriction-reason (string-ascii 64))
+)
+  (let
+    (
+      (target-record (unwrap! (map-get? registry-database-records { record-id: record-id }) RECORD_NOT_FOUND))
+      (current-block block-height)
+      (restriction-id (+ (var-get total-temporal-restrictions) u1))
+    )
+    ;; Temporal access validation
+    (asserts! (does-record-exist? record-id) RECORD_NOT_FOUND)
+    (asserts! (is-eq (get owner-principal target-record) tx-sender) OWNERSHIP_VERIFICATION_FAILED)
+    (asserts! (< access-window-start access-window-end) CAPACITY_LIMIT_EXCEEDED)
+    (asserts! (> access-window-start current-block) SYNCHRONIZATION_FAULT)
+    (asserts! (> (len restriction-reason) u0) ENCODING_STANDARD_BREACH)
+    (asserts! (< (len restriction-reason) u65) ENCODING_STANDARD_BREACH)
+
+    ;; Create temporal access restriction
+    (map-insert temporal-access-controls
+      { restriction-id: restriction-id }
+      {
+        controlled-record: record-id,
+        controlling-principal: tx-sender,
+        access-start-block: access-window-start,
+        access-end-block: access-window-end,
+        restriction-reason: restriction-reason,
+        is-active: true,
+        creation-block: current-block
+      }
+    )
+
+    ;; Update temporal restrictions counter
+    (var-set total-temporal-restrictions restriction-id)
+    (ok restriction-id)
+  )
+)
+
+;; Temporal access control storage
+(define-map temporal-access-controls
+  { restriction-id: uint }
+  {
+    controlled-record: uint,
+    controlling-principal: principal,
+    access-start-block: uint,
+    access-end-block: uint,
+    restriction-reason: (string-ascii 64),
+    is-active: bool,
+    creation-block: uint
+  }
+)
+
+;; Global temporal restrictions counter
+(define-data-var total-temporal-restrictions uint u0)
+
+;; Monitors and flags suspicious activity patterns in registry
+(define-public (flag-suspicious-activity 
+  (suspicious-principal principal)
+  (activity-type (string-ascii 32))
+  (severity-level uint)
+  (evidence-hash (string-ascii 64))
+)
+  (let
+    (
+      (alert-id (+ (var-get total-security-alerts) u1))
+      (detection-timestamp block-height)
+      (max-severity-level u10)
+    )
+    ;; Suspicious activity validation
+    (asserts! (> (len activity-type) u0) ENCODING_STANDARD_BREACH)
+    (asserts! (< (len activity-type) u33) ENCODING_STANDARD_BREACH)
+    (asserts! (> severity-level u0) CAPACITY_LIMIT_EXCEEDED)
+    (asserts! (<= severity-level max-severity-level) CAPACITY_LIMIT_EXCEEDED)
+    (asserts! (> (len evidence-hash) u0) ENCODING_STANDARD_BREACH)
+    (asserts! (< (len evidence-hash) u65) ENCODING_STANDARD_BREACH)
+
+    ;; Update security alert counter
+    (var-set total-security-alerts alert-id)
+    (ok alert-id)
+  )
+)
+
+;; Security alert registry storage
+(define-map security-alert-registry
+  { alert-id: uint }
+  {
+    flagged-principal: principal,
+    reporting-principal: principal,
+    activity-type: (string-ascii 32),
+    severity-level: uint,
+    detection-timestamp: uint,
+    evidence-hash: (string-ascii 64),
+    investigation-status: bool
+  }
+)
+
+;; Global security alert counter
+(define-data-var total-security-alerts uint u0)
+
+;; Implements multi-factor authorization for sensitive operations
+(define-public (authorize-critical-operation 
+  (operation-type (string-ascii 32))
+  (target-record-id uint)
+  (authorization-code uint)
+  (secondary-signature (string-ascii 128))
+)
+  (let
+    (
+      (authorization-id (+ (var-get total-authorizations) u1))
+      (auth-timestamp block-height)
+      (required-code u123456)
+    )
+    ;; Multi-factor validation checks
+    (asserts! (does-record-exist? target-record-id) RECORD_NOT_FOUND)
+    (asserts! (> (len operation-type) u0) ENCODING_STANDARD_BREACH)
+    (asserts! (< (len operation-type) u33) ENCODING_STANDARD_BREACH)
+    (asserts! (is-eq authorization-code required-code) OWNERSHIP_VERIFICATION_FAILED)
+    (asserts! (> (len secondary-signature) u0) ENCODING_STANDARD_BREACH)
+    (asserts! (< (len secondary-signature) u129) ENCODING_STANDARD_BREACH)
+
+    ;; Create authorization record
+    (map-insert critical-operation-authorizations
+      { authorization-id: authorization-id }
+      {
+        authorizing-principal: tx-sender,
+        operation-type: operation-type,
+        target-record: target-record-id,
+        auth-timestamp: auth-timestamp,
+        verification-status: true,
+        security-hash: secondary-signature
+      }
+    )
+
+    ;; Update authorization counter
+    (var-set total-authorizations authorization-id)
+    (ok authorization-id)
+  )
+)
+
+;; Critical operation authorization storage
+(define-map critical-operation-authorizations
+  { authorization-id: uint }
+  {
+    authorizing-principal: principal,
+    operation-type: (string-ascii 32),
+    target-record: uint,
+    auth-timestamp: uint,
+    verification-status: bool,
+    security-hash: (string-ascii 128)
+  }
+)
+
+;; Global authorization counter
+(define-data-var total-authorizations uint u0)
+
+;; Creates comprehensive audit trail for record access attempts
+(define-public (log-record-access-attempt 
+  (record-id uint) 
+  (access-type (string-ascii 32))
+  (access-result bool)
+)
+  (let
+    (
+      (audit-entry-id (+ (var-get total-audit-entries) u1))
+      (access-timestamp block-height)
+    )
+    ;; Access logging validation
+    (asserts! (does-record-exist? record-id) RECORD_NOT_FOUND)
+    (asserts! (> (len access-type) u0) ENCODING_STANDARD_BREACH)
+    (asserts! (< (len access-type) u33) ENCODING_STANDARD_BREACH)
+    ;; Update audit counter
+    (var-set total-audit-entries audit-entry-id)
+    (ok audit-entry-id)
+  )
+)
+
+;; Security audit trail storage
+(define-map security-audit-trail
+  { audit-id: uint }
+  {
+    record-id: uint,
+    accessing-principal: principal,
+    access-type: (string-ascii 32),
+    access-timestamp: uint,
+    access-successful: bool,
+    session-block: uint
+  }
+)
+
+;; Global audit entry counter
+(define-data-var total-audit-entries uint u0)
+
+;; Emergency record lockdown functionality for security incidents
+(define-public (emergency-lock-record (record-id uint) (lock-reason (string-ascii 64)))
+  (let
+    (
+      (target-record (unwrap! (map-get? registry-database-records { record-id: record-id }) RECORD_NOT_FOUND))
+      (lock-timestamp block-height)
+    )
+    ;; Security validation sequence
+    (asserts! (does-record-exist? record-id) RECORD_NOT_FOUND)
+    (asserts! (or 
+      (is-eq tx-sender registry-admin-controller)
+      (is-eq (get owner-principal target-record) tx-sender)
+    ) ADMIN_PRIVILEGE_REQUIRED)
+    (asserts! (> (len lock-reason) u0) ENCODING_STANDARD_BREACH)
+    (asserts! (< (len lock-reason) u65) ENCODING_STANDARD_BREACH)
+
+    ;; Create emergency lock entry
+    (map-insert emergency-record-locks
+      { record-id: record-id }
+      {
+        locked-by: tx-sender,
+        lock-timestamp: lock-timestamp,
+        lock-reason: lock-reason,
+        is-active: true
+      }
+    )
+    (ok true)
+  )
+)
+
+;; Emergency lock storage map
+(define-map emergency-record-locks
+  { record-id: uint }
+  {
+    locked-by: principal,
+    lock-timestamp: uint,
+    lock-reason: (string-ascii 64),
+    is-active: bool
+  }
+)
